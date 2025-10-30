@@ -3,36 +3,37 @@
 MacPing - macOS menu bar network latency monitor
 """
 
-import rumps
+import os
+import tempfile
 import threading
 import time
 from collections import deque
-from ping3 import ping
+
+import rumps
 from PIL import Image, ImageDraw
-import tempfile
-import os
+from ping3 import ping
 
 # Ping configuration
 TARGET_HOST = "google.com"
 PING_INTERVAL = 1.0  # seconds
-PING_TIMEOUT = 2.0   # seconds
+PING_TIMEOUT = 2.0  # seconds
 
 # Display configuration
-HISTORY_SIZE = 60    # number of pings to display
+HISTORY_SIZE = 60  # number of pings to display
 INITIAL_LATENCY = 10.0  # baseline value (ms) for pre-populating history
 
 # Rendering configuration
 # Note: macOS may scale very wide icons to fit menu bar constraints.
 # Current total width: 180 pixels (60 pings × 3 pixels/bar)
-BAR_WIDTH = 3        # pixels per bar
-BAR_HEIGHT = 18      # maximum bar height in pixels
+BAR_WIDTH = 3  # pixels per bar
+BAR_HEIGHT = 18  # maximum bar height in pixels
 BAR_COLOR = (255, 255, 255)  # RGB: white bars for normal latency
 BAR_COLOR_WARNING = (255, 0, 0)  # RGB: red bars for high latency/failures
 
 # Latency scaling range
 # Latencies are scaled from 0-100ms for consistent visualization
 # Anything above 100ms is shown as a warning (red bar at full height)
-LATENCY_MIN = 0.0    # minimum latency for scaling (ms)
+LATENCY_MIN = 0.0  # minimum latency for scaling (ms)
 LATENCY_MAX = 100.0  # maximum latency for scaling (ms)
 
 
@@ -45,13 +46,13 @@ class MacPingApp(rumps.App):
     """
 
     def __init__(self):
-        super(MacPingApp, self).__init__("MacPing", icon=None, title="")
+        super().__init__("MacPing", icon=None, title="")
 
         # Disable template mode so colors render correctly (not inverted in dark mode)
         self._template = False
 
         # Create temporary file for icon
-        self.temp_icon_fd, self.temp_icon_path = tempfile.mkstemp(suffix='.png')
+        self.temp_icon_fd, self.temp_icon_path = tempfile.mkstemp(suffix=".png")
 
         # Rolling buffer of ping results (in milliseconds, None for failures)
         # Pre-populate with baseline latency to maintain constant icon width
@@ -83,7 +84,7 @@ class MacPingApp(rumps.App):
                 # Update display
                 self._update_display()
 
-            except Exception as e:
+            except Exception:
                 # On error, record as failure
                 self.ping_history.append(None)
                 self._update_display()
@@ -100,7 +101,7 @@ class MacPingApp(rumps.App):
         pil_image = self._generate_histogram_image()
 
         # Save to temporary file
-        pil_image.save(self.temp_icon_path, format='PNG')
+        pil_image.save(self.temp_icon_path, format="PNG")
 
         # Update icon
         self.icon = self.temp_icon_path
@@ -111,7 +112,7 @@ class MacPingApp(rumps.App):
         image_height = BAR_HEIGHT
 
         # Create image with transparent background
-        image = Image.new('RGBA', (image_width, image_height), (0, 0, 0, 0))
+        image = Image.new("RGBA", (image_width, image_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
 
         # Use fixed latency range for consistent scaling across all updates
@@ -139,8 +140,7 @@ class MacPingApp(rumps.App):
             # Draw bar from bottom up
             y_top = image_height - bar_pixels
             draw.rectangle(
-                [x_position, y_top, x_position + BAR_WIDTH - 1, image_height - 1],
-                fill=color
+                [x_position, y_top, x_position + BAR_WIDTH - 1, image_height - 1], fill=color
             )
 
         return image
