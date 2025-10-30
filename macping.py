@@ -13,28 +13,32 @@ import rumps
 from PIL import Image, ImageDraw
 from ping3 import ping
 
-# Ping configuration
-TARGET_HOST = "google.com"
-PING_INTERVAL = 1.0  # seconds
-PING_TIMEOUT = 2.0  # seconds
+# Import window components
+from window import WindowManager
 
-# Display configuration
-HISTORY_SIZE = 60  # number of pings to display
+# Configuration
+# ============
+
+# Ping settings
+TARGET_HOST = "google.com"
+PING_INTERVAL = 1.0  # seconds between pings
+PING_TIMEOUT = 2.0  # seconds to wait for ping response
+
+# History settings
+HISTORY_SIZE = 60  # number of pings to keep in memory
 INITIAL_LATENCY = 10.0  # baseline value (ms) for pre-populating history
 
-# Rendering configuration
-# Note: macOS may scale very wide icons to fit menu bar constraints.
+# Latency thresholds
+LATENCY_MIN = 0.0  # minimum latency for scaling (ms)
+LATENCY_MAX = 100.0  # maximum latency for scaling (ms)
+
+# Menu bar icon rendering
+# Note: macOS may scale very wide icons to fit menu bar constraints
 # Current total width: 180 pixels (60 pings × 3 pixels/bar)
 BAR_WIDTH = 3  # pixels per bar
 BAR_HEIGHT = 18  # maximum bar height in pixels
 BAR_COLOR = (255, 255, 255)  # RGB: white bars for normal latency
 BAR_COLOR_WARNING = (255, 0, 0)  # RGB: red bars for high latency/failures
-
-# Latency scaling range
-# Latencies are scaled from 0-100ms for consistent visualization
-# Anything above 100ms is shown as a warning (red bar at full height)
-LATENCY_MIN = 0.0  # minimum latency for scaling (ms)
-LATENCY_MAX = 100.0  # maximum latency for scaling (ms)
 
 
 class MacPingApp(rumps.App):
@@ -46,22 +50,26 @@ class MacPingApp(rumps.App):
     """
 
     def __init__(self):
-        super().__init__("MacPing", icon=None, title="")
+        # Initialize with callback for icon clicks
+        super().__init__("MacPing", icon=None, title="", quit_button=None)
 
-        # Disable template mode so colors render correctly (not inverted in dark mode)
+        # Disable template mode so colors render correctly in dark mode
         self._template = False
 
-        # Create temporary file for icon
+        # Setup menu with Show Details and Quit options
+        self.menu = ["Show Details", "Quit"]
+
+        # Create temporary file for menu bar icon
         self.temp_icon_fd, self.temp_icon_path = tempfile.mkstemp(suffix=".png")
 
-        # Rolling buffer of ping results (in milliseconds, None for failures)
-        # Pre-populate with baseline latency to maintain constant icon width
+        # Initialize ping history buffer (pre-populated for consistent icon width)
         self.ping_history = deque([INITIAL_LATENCY] * HISTORY_SIZE, maxlen=HISTORY_SIZE)
-
-        # Initial display
         self._update_display()
 
-        # Start ping thread
+        # Initialize window manager for detail view
+        self.window_manager = WindowManager(self.ping_history, LATENCY_MIN, LATENCY_MAX)
+
+        # Start background ping worker
         self.running = True
         self.ping_thread = threading.Thread(target=self._ping_worker, daemon=True)
         self.ping_thread.start()
@@ -145,9 +153,19 @@ class MacPingApp(rumps.App):
 
         return image
 
+    @rumps.clicked("Show Details")
+    def show_details(self, _):
+        """Show the detail window"""
+        self.window_manager.show_details()
+
     @rumps.clicked("Quit")
     def quit_app(self, _):
+        """Quit the application"""
         self.running = False
+
+        # Clean up window manager
+        self.window_manager.cleanup()
+
         # Clean up temporary icon file
         try:
             os.close(self.temp_icon_fd)
@@ -155,6 +173,7 @@ class MacPingApp(rumps.App):
         except (OSError, AttributeError):
             # File may already be closed/deleted, or not yet created
             pass
+
         rumps.quit_application()
 
 
