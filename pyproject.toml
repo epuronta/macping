@@ -1,0 +1,13 @@
+[project]
+name = "macping"
+version = "0.1.0"
+description = "A lightweight macOS menu bar app that monitors network latency"
+requires-python = ">=3.8"
+dependencies = [
+    "rumps>=0.4.0",
+    "ping3>=4.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
