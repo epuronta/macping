@@ -4,7 +4,7 @@ A lightweight macOS menu bar app that monitors network latency with real-time sp
 
 ## What it does
 
-MacPing continuously pings google.com and displays the last 30 ping results as a sparkline histogram in your menu bar using Unicode block characters (▁▂▃▄▅▆▇█). Taller bars = higher latency. Updates in real-time.
+MacPing continuously pings google.com and displays the last 60 ping results as a pixel-based histogram in your menu bar. Taller bars = higher latency. Updates in real-time. Bars above 100ms shown in red.
 
 ## Installation
 
@@ -21,28 +21,17 @@ uv run macping.py
 ## Dependencies
 
 - `rumps` - macOS menu bar framework
-- `ping3` or `pythonping` - ICMP ping library
+- `ping3` - ICMP ping library
+- `pillow` - Image generation for histogram rendering
 
 ## How it works
 
 - Pings google.com every 1 second
-- Maintains rolling buffer of last 30 results
-- Maps latency to Unicode blocks (▁▂▃▄▅▆▇█)
+- Maintains rolling buffer of last 60 results
+- Generates pixel-based histogram (configurable bar width and height)
+- Scales latency from 0-100ms (hardcoded min/max)
 - Updates menu bar in real-time
-- Failed pings shown as █
-
-## Configuration
-
-Hardcoded defaults in `macping.py`:
-- Target: `google.com`
-- Interval: `1 second`
-- History: `30 pings`
-
-## Tech Stack
-
-- Python with `rumps` for menu bar integration
-- Background thread for non-blocking ping operations
-- Dynamic scaling for histogram rendering
+- Failed pings or latency >100ms shown as red bars
 
 ## License
 

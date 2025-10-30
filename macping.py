@@ -8,27 +8,57 @@ import threading
 import time
 from collections import deque
 from ping3 import ping
+from PIL import Image, ImageDraw
+import tempfile
+import os
 
-# Configuration
+# Ping configuration
 TARGET_HOST = "google.com"
 PING_INTERVAL = 1.0  # seconds
-HISTORY_SIZE = 30    # number of pings to display
 PING_TIMEOUT = 2.0   # seconds
 
-# Unicode block characters for histogram
-BLOCKS = "▁▂▃▄▅▆▇█"
+# Display configuration
+HISTORY_SIZE = 60    # number of pings to display
+INITIAL_LATENCY = 10.0  # baseline value (ms) for pre-populating history
+
+# Rendering configuration
+# Note: macOS may scale very wide icons to fit menu bar constraints.
+# Current total width: 180 pixels (60 pings × 3 pixels/bar)
+BAR_WIDTH = 3        # pixels per bar
+BAR_HEIGHT = 18      # maximum bar height in pixels
+BAR_COLOR = (255, 255, 255)  # RGB: white bars for normal latency
+BAR_COLOR_WARNING = (255, 0, 0)  # RGB: red bars for high latency/failures
+
+# Latency scaling range
+# Latencies are scaled from 0-100ms for consistent visualization
+# Anything above 100ms is shown as a warning (red bar at full height)
+LATENCY_MIN = 0.0    # minimum latency for scaling (ms)
+LATENCY_MAX = 100.0  # maximum latency for scaling (ms)
 
 
 class MacPingApp(rumps.App):
+    """
+    macOS menu bar application that continuously monitors network latency.
+
+    Displays a real-time pixel-based histogram showing the last 60 ping results.
+    Normal latency (0-100ms) shown as white bars, high latency/failures as red bars.
+    """
+
     def __init__(self):
-        super(MacPingApp, self).__init__("MacPing")
+        super(MacPingApp, self).__init__("MacPing", icon=None, title="")
+
+        # Disable template mode so colors render correctly (not inverted in dark mode)
+        self._template = False
+
+        # Create temporary file for icon
+        self.temp_icon_fd, self.temp_icon_path = tempfile.mkstemp(suffix='.png')
 
         # Rolling buffer of ping results (in milliseconds, None for failures)
-        # Pre-populate with minimal values to maintain constant width
-        self.ping_history = deque([10.0] * HISTORY_SIZE, maxlen=HISTORY_SIZE)
+        # Pre-populate with baseline latency to maintain constant icon width
+        self.ping_history = deque([INITIAL_LATENCY] * HISTORY_SIZE, maxlen=HISTORY_SIZE)
 
         # Initial display
-        self.title = BLOCKS[0] * HISTORY_SIZE
+        self._update_display()
 
         # Start ping thread
         self.running = True
@@ -64,53 +94,67 @@ class MacPingApp(rumps.App):
     def _update_display(self):
         """Update menu bar with current histogram"""
         if not self.ping_history:
-            self.title = "Waiting..."
             return
 
-        # Generate histogram
-        histogram = self._generate_histogram()
-        self.title = histogram
+        # Generate histogram image
+        pil_image = self._generate_histogram_image()
 
-    def _generate_histogram(self):
-        """Convert ping history to Unicode block histogram"""
-        if not self.ping_history:
-            return ""
+        # Save to temporary file
+        pil_image.save(self.temp_icon_path, format='PNG')
 
-        # Separate valid pings from failures
-        valid_pings = [p for p in self.ping_history if p is not None]
+        # Update icon
+        self.icon = self.temp_icon_path
 
-        if not valid_pings:
-            # All failures - show all max blocks
-            return BLOCKS[-1] * len(self.ping_history)
+    def _generate_histogram_image(self):
+        """Generate histogram image from ping history."""
+        image_width = HISTORY_SIZE * BAR_WIDTH
+        image_height = BAR_HEIGHT
 
-        # Calculate min/max for scaling
-        min_latency = min(valid_pings)
-        max_latency = max(valid_pings)
-        latency_range = max_latency - min_latency
+        # Create image with transparent background
+        image = Image.new('RGBA', (image_width, image_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
 
-        # Generate histogram
-        histogram = []
-        for ping_result in self.ping_history:
+        # Use fixed latency range for consistent scaling across all updates
+        latency_range = LATENCY_MAX - LATENCY_MIN
+
+        # Draw each ping result as a vertical bar
+        for i, ping_result in enumerate(self.ping_history):
+            x_position = i * BAR_WIDTH
+
             if ping_result is None:
-                # Failed ping - use max block
-                histogram.append(BLOCKS[-1])
+                # Failed ping - full height red bar
+                bar_pixels = image_height
+                color = BAR_COLOR_WARNING
+            elif ping_result > LATENCY_MAX:
+                # High latency warning - full height red bar
+                bar_pixels = image_height
+                color = BAR_COLOR_WARNING
             else:
-                # Scale to block index
-                if latency_range == 0:
-                    # All pings have same latency
-                    block_index = 0
-                else:
-                    normalized = (ping_result - min_latency) / latency_range
-                    block_index = int(normalized * (len(BLOCKS) - 1))
-                    block_index = min(block_index, len(BLOCKS) - 1)  # Clamp to max
+                # Normal ping - scale latency to bar height in pixels
+                normalized = (ping_result - LATENCY_MIN) / latency_range
+                normalized = max(0.0, min(1.0, normalized))  # Clamp to 0-1
+                bar_pixels = max(1, int(normalized * image_height))
+                color = BAR_COLOR
 
-                histogram.append(BLOCKS[block_index])
+            # Draw bar from bottom up
+            y_top = image_height - bar_pixels
+            draw.rectangle(
+                [x_position, y_top, x_position + BAR_WIDTH - 1, image_height - 1],
+                fill=color
+            )
 
-        return "".join(histogram)
+        return image
 
     @rumps.clicked("Quit")
     def quit_app(self, _):
         self.running = False
+        # Clean up temporary icon file
+        try:
+            os.close(self.temp_icon_fd)
+            os.unlink(self.temp_icon_path)
+        except (OSError, AttributeError):
+            # File may already be closed/deleted, or not yet created
+            pass
         rumps.quit_application()
 
 
