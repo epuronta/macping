@@ -25,8 +25,8 @@ PING_INTERVAL = 1.0  # seconds between pings
 PING_TIMEOUT = 2.0  # seconds to wait for ping response
 
 # History settings
-HISTORY_SIZE = 60  # number of pings to keep in memory
-INITIAL_LATENCY = 10.0  # baseline value (ms) for pre-populating history
+HISTORY_SIZE = 30  # number of pings to keep in memory
+INITIAL_LATENCY = 0.0  # baseline value (ms) for pre-populating history
 
 # Latency thresholds
 LATENCY_MIN = 0.0  # minimum latency for scaling (ms)
